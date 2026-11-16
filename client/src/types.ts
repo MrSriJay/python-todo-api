@@ -10,5 +10,11 @@ export type Todo = {
   updated_at: string
 }
 
+export type AuthUser = {
+  id: number
+  name: string
+  email: string
+}
+
 export type TodoFilter = "all" | "open" | "done"
 export type TodoSort = "newest" | "oldest" | "title"

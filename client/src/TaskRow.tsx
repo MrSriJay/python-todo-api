@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Check, Loader2, Pencil, Trash2, X } from "lucide-react"
 import { ApiError } from "./api"
 import { noteColor } from "./colors"
+import { createdOn } from "./dates"
 import { NotePad, NoteText } from "./NotePad"
 import { PenCross } from "./PenCross"
 import type { Todo } from "./types"
@@ -223,6 +224,9 @@ export function TaskRow({
           </button>
         </>
       )}
+      <time className="sticky-date" dateTime={todo.created_at}>
+        {createdOn(todo.created_at)}
+      </time>
     </li>
   )
 }

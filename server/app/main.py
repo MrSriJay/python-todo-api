@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.exceptions import register_exception_handlers
 from app.logging_config import configure_logging
 from app.middleware import RequestLoggingMiddleware
+from app.routers.auth import router as auth_router
 from app.routers.todos import router as todos_router
 
 logger = logging.getLogger("todo_api")
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
+    app.include_router(auth_router, prefix="/api")
     app.include_router(todos_router, prefix="/api")
 
     @app.get("/health", tags=["health"], summary="Health check")

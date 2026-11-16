@@ -4,10 +4,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.deps import get_todo_service
-from app.models import Todo
+from app.deps import get_current_user, get_todo_service
+from app.models import User
 from app.schemas import SortField, SortOrder, TodoCreate, TodoRead, TodoUpdate
-from app.services.todos import TodoService
+from app.services.todos import TodoService, present_todo
 
 router = APIRouter(prefix="/todos", tags=["todos"])
 
@@ -52,8 +52,10 @@ def list_todos(
     sort: SortField = Query("created_at", description="Field to sort by."),
     order: SortOrder = Query("desc", description="Sort direction."),
     service: TodoService = Depends(get_todo_service),
-) -> list[Todo]:
+    user: User = Depends(get_current_user),
+) -> list[TodoRead]:
     items, total = service.list_todos(
+        user,
         done=done,
         limit=limit,
         offset=offset,
@@ -64,7 +66,7 @@ def list_todos(
     response.headers["X-Offset"] = str(offset)
     if limit is not None:
         response.headers["X-Limit"] = str(limit)
-    return items
+    return [present_todo(item) for item in items]
 
 
 @router.get(
@@ -73,8 +75,12 @@ def list_todos(
     summary="Get a TODO",
     responses=_NOT_FOUND,
 )
-def get_todo(todo_id: int, service: TodoService = Depends(get_todo_service)) -> Todo:
-    return service.get_todo(todo_id)
+def get_todo(
+    todo_id: int,
+    service: TodoService = Depends(get_todo_service),
+    user: User = Depends(get_current_user),
+) -> TodoRead:
+    return present_todo(service.get_todo(user, todo_id))
 
 
 @router.post(
@@ -84,8 +90,12 @@ def get_todo(todo_id: int, service: TodoService = Depends(get_todo_service)) -> 
     summary="Create a TODO",
     responses=_VALIDATION,
 )
-def create_todo(payload: TodoCreate, service: TodoService = Depends(get_todo_service)) -> Todo:
-    return service.create_todo(payload)
+def create_todo(
+    payload: TodoCreate,
+    service: TodoService = Depends(get_todo_service),
+    user: User = Depends(get_current_user),
+) -> TodoRead:
+    return present_todo(service.create_todo(user, payload))
 
 
 @router.put(
@@ -98,8 +108,9 @@ def update_todo(
     todo_id: int,
     payload: TodoUpdate,
     service: TodoService = Depends(get_todo_service),
-) -> Todo:
-    return service.update_todo(todo_id, payload)
+    user: User = Depends(get_current_user),
+) -> TodoRead:
+    return present_todo(service.update_todo(user, todo_id, payload))
 
 
 @router.patch(
@@ -108,8 +119,12 @@ def update_todo(
     summary="Toggle a TODO done status",
     responses=_NOT_FOUND,
 )
-def toggle_done(todo_id: int, service: TodoService = Depends(get_todo_service)) -> Todo:
-    return service.toggle_done(todo_id)
+def toggle_done(
+    todo_id: int,
+    service: TodoService = Depends(get_todo_service),
+    user: User = Depends(get_current_user),
+) -> TodoRead:
+    return present_todo(service.toggle_done(user, todo_id))
 
 
 @router.delete(
@@ -118,6 +133,10 @@ def toggle_done(todo_id: int, service: TodoService = Depends(get_todo_service)) 
     summary="Delete a TODO",
     responses=_NOT_FOUND,
 )
-def delete_todo(todo_id: int, service: TodoService = Depends(get_todo_service)) -> Response:
-    service.delete_todo(todo_id)
+def delete_todo(
+    todo_id: int,
+    service: TodoService = Depends(get_todo_service),
+    user: User = Depends(get_current_user),
+) -> Response:
+    service.delete_todo(user, todo_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

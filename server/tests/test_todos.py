@@ -5,8 +5,9 @@ from typing import Any
 import pytest
 from app.database import create_db_engine, get_db
 from app.main import app
-from app.models import Base, Todo
+from app.models import Base, Todo, User, utcnow
 from app.schemas import TITLE_MAX_LENGTH, TodoCreate
+from app.security import decrypt_text, hash_passcode
 from app.services.todos import TodoService
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
@@ -265,7 +266,12 @@ def test_unhandled_errors_hide_internals(
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app, raise_server_exceptions=False) as raw_client:
-            response = raw_client.get("/api/todos")
+            signup = raw_client.post(
+                "/api/auth/signup",
+                json={"name": "Ada Lovelace", "email": "ada@example.com", "passcode": "123456"},
+            )
+            token = signup.json()["access_token"]
+            response = raw_client.get("/api/todos", headers={"Authorization": f"Bearer {token}"})
     finally:
         app.dependency_overrides.clear()
 
@@ -281,7 +287,15 @@ def test_rows_survive_a_new_database_session(tmp_path: Path) -> None:
     Base.metadata.create_all(engine)
     first = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)()
     try:
-        TodoService(first).create_todo(TodoCreate(title="persist me", description=None))
+        user = User(
+            name="Ada",
+            email="ada@example.com",
+            passcode_hash=hash_passcode("123456"),
+            created_at=utcnow(),
+        )
+        first.add(user)
+        first.commit()
+        TodoService(first).create_todo(user, TodoCreate(title="persist me", description=None))
     finally:
         first.close()
     engine.dispose()
@@ -290,6 +304,7 @@ def test_rows_survive_a_new_database_session(tmp_path: Path) -> None:
     second = sessionmaker(bind=reopened, autoflush=False, expire_on_commit=False)()
     try:
         items, total = TodoService(second).list_todos(
+            user,
             done=None,
             limit=None,
             offset=0,
@@ -297,7 +312,8 @@ def test_rows_survive_a_new_database_session(tmp_path: Path) -> None:
             order="desc",
         )
         assert total == 1
-        assert items[0].title == "persist me"
+        assert items[0].title != "persist me"
+        assert decrypt_text(items[0].title) == "persist me"
     finally:
         second.close()
         reopened.dispose()

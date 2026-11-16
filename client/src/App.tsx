@@ -6,17 +6,24 @@ import {
   Inbox,
   ListTodo,
   Loader2,
+  KeyRound,
+  LogOut,
   Moon,
   Plus,
   Rows3,
   Search,
   StickyNote,
   Sun,
+  UserRound,
   X,
 } from "lucide-react"
+import { AuthScreen } from "./AuthScreen"
 import {
   ApiError,
+  authToken,
+  clearToken,
   createTodo,
+  currentUser,
   deleteTodo,
   listTodos,
   toggleTodo,
@@ -25,8 +32,9 @@ import {
 import { ColorSwatches } from "./ColorSwatches"
 import { NotePad } from "./NotePad"
 import { PaperSheet } from "./PaperSheet"
+import { ResetPasscode } from "./ResetPasscode"
 import { TaskRow } from "./TaskRow"
-import type { NoteColor, Todo, TodoFilter, TodoSort } from "./types"
+import type { AuthUser, NoteColor, Todo, TodoFilter, TodoSort } from "./types"
 
 type View = "new" | "wall"
 type Theme = "light" | "dark"
@@ -63,15 +71,20 @@ export function App() {
   const [pendingToggle, setPendingToggle] = useState<Todo | null>(null)
   const [creating, setCreating] = useState(false)
   const [leavingIds, setLeavingIds] = useState<number[]>([])
-  const [view, setView] = useState<View>("new")
+  const [view, setView] = useState<View>("wall")
   const [panelMotion, setPanelMotion] = useState<"" | "in-left" | "in-right">("")
   const [theme, setTheme] = useState<Theme>(initialTheme)
+  const [session, setSession] = useState<AuthUser | null>(null)
+  const [sessionReady, setSessionReady] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false })
 
   function showView(next: View) {
     if (next === view) return
-    setPanelMotion(next === "wall" ? "in-right" : "in-left")
+    setPanelMotion(next === "new" ? "in-right" : "in-left")
     setView(next)
   }
 
@@ -87,7 +100,7 @@ export function App() {
     const observer = new ResizeObserver(measure)
     observer.observe(root)
     return () => observer.disconnect()
-  }, [view])
+  }, [view, session])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -95,6 +108,48 @@ export function App() {
   }, [theme])
 
   useEffect(() => {
+    if (!menuOpen) return
+    function onPointer(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false)
+    }
+    document.addEventListener("mousedown", onPointer)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onPointer)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [menuOpen])
+
+  useEffect(() => {
+    let cancelled = false
+    const saved = authToken()
+    if (!saved) {
+      setSessionReady(true)
+      return
+    }
+    currentUser()
+      .then((user) => {
+        if (!cancelled) setSession(user)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          clearToken()
+          setSession(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSessionReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!session) return
     let cancelled = false
     setRefreshing(true)
     listTodos(filter, sort)
@@ -105,7 +160,13 @@ export function App() {
         setError(null)
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) setError(errorMessage(loadError, "Could not load tasks."))
+        if (cancelled) return
+        if (loadError instanceof ApiError && loadError.status === 401) {
+          clearToken()
+          setSession(null)
+          return
+        }
+        setError(errorMessage(loadError, "Could not load tasks."))
       })
       .finally(() => {
         if (!cancelled) {
@@ -116,7 +177,7 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [filter, sort])
+  }, [filter, sort, session])
 
   async function reload() {
     const result = await listTodos(filter, sort)
@@ -287,6 +348,60 @@ export function App() {
       : `${total} tasks`
   const opened = todos.find((item) => item.id === openedId) ?? null
 
+  function signOut() {
+    clearToken()
+    setMenuOpen(false)
+    setResetOpen(false)
+    setSession(null)
+    setTodos([])
+    setTotal(0)
+    setOpenedId(null)
+    setQuery("")
+    setPendingToggle(null)
+  }
+
+  const themeButton = (
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+    >
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      {theme === "dark" ? "Light" : "Dark"}
+    </button>
+  )
+
+  if (!sessionReady) {
+    return (
+      <main className="page">
+        <p className="status">
+          <Loader2 size={18} className="spin" />
+          Loading…
+        </p>
+      </main>
+    )
+  }
+
+  if (!session) {
+    return (
+      <main className="page is-auth">
+        <header className="masthead">
+          <span className="mark" aria-hidden="true">
+            <ListTodo size={22} />
+          </span>
+          <div>
+            <p className="eyebrow">TODO</p>
+            <h1>Tasks</h1>
+            <p className="lede">Log in to open your sticky wall.</p>
+          </div>
+          {themeButton}
+        </header>
+        <AuthScreen onSignedIn={setSession} />
+      </main>
+    )
+  }
+
   return (
     <main className={`page${view === "wall" ? " is-wide" : ""}`}>
       <header className="masthead">
@@ -298,15 +413,42 @@ export function App() {
           <h1>Tasks</h1>
           <p className="lede">Add a task, then see it on the sticky wall.</p>
         </div>
-        <button
-          type="button"
-          className="theme-toggle"
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          {theme === "dark" ? "Light" : "Dark"}
-        </button>
+        <div className="account">
+          <div className="user-menu" ref={menuRef}>
+            <button
+              type="button"
+              className="user-button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span className="user-icon" aria-hidden="true">
+                <UserRound size={16} />
+              </span>
+              <span className="who">{session.name}</span>
+            </button>
+            {menuOpen ? (
+              <div className="user-drop" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setResetOpen(true)
+                  }}
+                >
+                  <KeyRound size={16} />
+                  Change passcode
+                </button>
+                <button type="button" role="menuitem" className="is-danger" onClick={signOut}>
+                  <LogOut size={16} />
+                  Log out
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {themeButton}
+        </div>
       </header>
 
       <div className="views" role="tablist" aria-label="Task views" ref={tabsRef}>
@@ -317,22 +459,22 @@ export function App() {
         <button
           type="button"
           role="tab"
-          aria-selected={view === "new"}
-          className={view === "new" ? "is-selected" : ""}
-          onClick={() => showView("new")}
-        >
-          <Plus size={16} />
-          New task
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={view === "wall"}
           className={view === "wall" ? "is-selected" : ""}
           onClick={() => showView("wall")}
         >
           <StickyNote size={16} />
           Sticky wall
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "new"}
+          className={view === "new" ? "is-selected" : ""}
+          onClick={() => showView("new")}
+        >
+          <Plus size={16} />
+          New task
         </button>
       </div>
 
@@ -445,7 +587,7 @@ export function App() {
               onError={setError}
             />
           ))}
-          <li>
+          <li className="add-slot">
             <button type="button" className="sticky-add" onClick={() => showView("new")}>
               <Plus size={32} />
               <span>Add a task</span>
@@ -467,6 +609,7 @@ export function App() {
           onError={setError}
         />
       ) : null}
+      {resetOpen ? <ResetPasscode onClose={() => setResetOpen(false)} /> : null}
       {pendingToggle ? (
         <div className="confirm-backdrop" onClick={() => setPendingToggle(null)}>
           <div

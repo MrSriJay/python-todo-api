@@ -1,61 +1,84 @@
 # TODO API
 
-Backend for a small TODO app. Clients can list, filter, create, edit, complete, and delete tasks. Data is stored in PostgreSQL (or SQLite for local development) and the API is documented with OpenAPI at `/docs`.
+A small TODO app with accounts. Each person signs up with a name, email, and 6-digit passcode, then keeps notes on a sticky wall. The API checks a JWT on every task request. Titles and descriptions are encrypted in PostgreSQL. The API is documented with OpenAPI at `/docs`.
 
 ## Layout
 
 ```text
 server/     FastAPI application, migrations, and tests
-client/     Optional React UI
+client/     React UI
+docs/       User guide and architecture
 ```
 
 Routing, request validation, and database access live in separate modules:
 
-- `server/app/routers/todos.py` — HTTP routes
+- `server/app/routers/auth.py` — signup, login, and passcode change
+- `server/app/routers/todos.py` — task routes, each requiring the current user
 - `server/app/schemas.py` — Pydantic request and response models
-- `server/app/services/todos.py` — queries and writes
-- `server/app/models.py` — SQLAlchemy model
+- `server/app/services/` — account and task rules
+- `server/app/security.py` — passcode hash, JWT, and note encryption
+- `server/app/models.py` — SQLAlchemy models
 
 ## Documentation
 
+- [Server setup, migrations, tests, and limits](server/README.md)
+- [Client setup and limits](client/README.md)
 - [User guide](docs/user-guide.md) ([PDF](docs/user-guide.pdf))
 - [Architecture and database](docs/architecture.md) ([PDF](docs/architecture.pdf))
 - [User guide and architecture, one PDF](docs/TODO-API-documentation.pdf)
 
+## Demo
+
+<video src="docs/demo.mp4" controls width="760"></video>
+
+[Play the walkthrough](docs/demo.mp4). It signs up, logs in, adds and edits a note, marks it done, searches and filters, switches between light and dark, deletes a note, and changes the passcode.
+
 ## Interface
 
-The description is a notepad. Select text and use the toolbar for bold, italic, underline, strikethrough, a bullet list, or a numbered list. The formatted note is what you see in the task list.
+Log in, then use **Sticky wall** or **New task**. Notes are colored cards. Open a card to read the full text. The description is a notepad: bold, italic, underline, strikethrough, and lists. The account menu on your name has **Change passcode** and **Log out**.
 
-![Tasks screen with a formatted note](docs/ui.png)
+![Sticky wall](docs/ui.png)
 
-![Notepad while editing a note](docs/editor.png)
+![An open note](docs/note.png)
+
+![New task](docs/editor.png)
 
 ## Architecture
 
-The browser talks only to the React app. Vite forwards `/api` to FastAPI. Each request is validated, then handled by the service, then stored through SQLAlchemy.
+The browser talks only to the React app. Vite forwards `/api` to FastAPI. The API checks the JWT, encrypts note text, then stores it through SQLAlchemy.
 
 ```mermaid
 flowchart LR
-  UI["React client"] -->|"HTTP /api"| API["FastAPI"]
-  API --> Router["routers/todos.py"]
-  Router --> Schemas["schemas.py"]
-  Router --> Service["services/todos.py"]
-  Service --> Model["models.py"]
-  Model --> DB[("PostgreSQL")]
+  UI["React client"] -->|"HTTP /api + JWT"| API["FastAPI"]
+  API --> Auth["routers/auth.py"]
+  API --> Todos["routers/todos.py"]
+  Auth --> Security["security.py"]
+  Todos --> Security
+  Security --> DB[("PostgreSQL")]
 ```
 
 Alembic owns the schema. The API reads `DATABASE_URL` from the environment and does not create tables on startup.
 
 ## Database
 
-There is one table, `todos`. `done` and `created_at` are indexed because the list endpoint filters and sorts on them.
+`users` holds the account. `todos` holds that account's notes. `passcode_hash` is a bcrypt hash. `title` and `description` are ciphertext.
 
 ```mermaid
 erDiagram
+  USERS ||--o{ TODOS : owns
+  USERS {
+    int id PK
+    varchar name
+    varchar email UK
+    varchar passcode_hash
+    timestamptz created_at
+  }
   TODOS {
     int id PK
-    varchar title
+    int user_id FK
+    text title
     text description
+    varchar color
     boolean done
     timestamptz created_at
     timestamptz updated_at
@@ -75,7 +98,7 @@ docker compose up --build
 - Swagger UI: http://localhost:8000/docs
 - PostgreSQL: `localhost:5433`, database `todo`, user `todo`, password `todo`
 
-Those database credentials are for local development. The API container runs migrations before it starts serving traffic. TODO rows are stored in the `todo_pg` volume, so they remain after the API container restarts.
+Those database credentials are for local development. The API container runs migrations before it starts serving traffic. Accounts and notes are stored in the `todo_pg` volume, so they remain after the API container restarts.
 
 ## Run locally
 
@@ -85,6 +108,10 @@ Python 3.11 or newer. Setup, migrations, tests, and database notes are in [serve
 
 | Method | Path | Success |
 | --- | --- | --- |
+| POST | `/api/auth/signup` | 201 |
+| POST | `/api/auth/login` | 200 |
+| GET | `/api/auth/me` | 200 |
+| POST | `/api/auth/passcode` | 204 |
 | GET | `/api/todos` | 200 |
 | GET | `/api/todos/{id}` | 200 |
 | POST | `/api/todos` | 201 |
@@ -92,7 +119,9 @@ Python 3.11 or newer. Setup, migrations, tests, and database notes are in [serve
 | PATCH | `/api/todos/{id}/done` | 200 |
 | DELETE | `/api/todos/{id}` | 204 |
 
-`GET /api/todos` accepts `done`, `limit`, `offset`, `sort`, and `order`. The list body is a JSON array. `X-Total-Count` and `X-Offset` are always set. `X-Limit` is set when `limit` is sent.
+Todo routes, `/api/auth/me`, and `/api/auth/passcode` require `Authorization: Bearer <token>`. `GET /health` is public.
+
+`GET /api/todos` accepts `done`, `limit`, `offset`, `sort`, and `order`. The list body is a JSON array of the current user's notes. `X-Total-Count` and `X-Offset` are always set. `X-Limit` is set when `limit` is sent.
 
 Missing todos return `404` with `{"detail": "TODO not found"}`. Invalid bodies and query parameters return `422` with `{"detail": "<what is wrong>"}`. Unexpected failures return `500` with `{"detail": "Internal server error"}` and no stack trace.
 
@@ -101,10 +130,10 @@ Missing todos return `404` with `{"detail": "TODO not found"}`. Invalid bodies a
 - **FastAPI** gives typed routes and Swagger UI without a separate API spec.
 - **SQLAlchemy 2** and **Alembic** keep the model, queries, and schema changes explicit.
 - **PostgreSQL** is the intended database. **SQLite** is the default when `DATABASE_URL` is unset, and it is what the tests use, so the suite does not need a running database.
-- Endpoints are synchronous. Each request uses one SQLAlchemy session and commits in the service, which is easy to follow for this workload.
-- `PUT /api/todos/{id}` updates only `title` and/or `description`. `done` changes only through `PATCH /api/todos/{id}/done`, which toggles the current value.
-- The React client in `client/` talks to the API over HTTP. Vite proxies `/api` to the backend. Completed tasks are struck through, and create, edit, toggle, and delete update the list before the response returns.
-- The description notepad stores formatting as a small set of HTML tags (`strong`, `em`, `u`, `s`, `ul`, `ol`, `li`, `br`, `div`). Other tags are removed before the note is saved.
+- Endpoints are synchronous. Each request uses one SQLAlchemy session and commits in the service.
+- Passcodes are hashed with bcrypt. Access tokens are JWTs. Note text is encrypted with Fernet using a server key, so the database does not hold the plaintext title or description.
+- `PUT /api/todos/{id}` updates only the title, description, and color fields that were sent. `done` changes only through `PATCH /api/todos/{id}/done`, which toggles the current value.
+- The React client stores the token in the browser and attaches it to `/api` calls. Vite proxies `/api` to the backend.
 
 ## Checks
 

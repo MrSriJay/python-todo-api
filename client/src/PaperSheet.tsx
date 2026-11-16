@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Check, Loader2, Pencil, Trash2, X } from "lucide-react"
 import { ApiError } from "./api"
 import { noteColor } from "./colors"
+import { createdOn } from "./dates"
 import { ColorSwatches } from "./ColorSwatches"
 import { NotePad, NoteText } from "./NotePad"
 import { PenCross } from "./PenCross"
@@ -111,6 +112,9 @@ export function PaperSheet({
               label="Description"
               placeholder="Optional note. Bold a word, or start a list."
             />
+            <time className="paper-date" dateTime={todo.created_at}>
+              {createdOn(todo.created_at)}
+            </time>
             <div className="row-actions">
               <button type="button" className="primary" onClick={() => void save()} disabled={saving}>
                 {saving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
@@ -135,6 +139,9 @@ export function PaperSheet({
                 <p className="paper-empty">No note yet.</p>
               )}
             </div>
+            <time className="paper-date" dateTime={todo.created_at}>
+              {createdOn(todo.created_at)}
+            </time>
             <div className="paper-actions">
               {todo.done ? null : (
                 <button type="button" className="ghost" onClick={() => setEditing(true)}>

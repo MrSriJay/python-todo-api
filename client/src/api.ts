@@ -1,9 +1,41 @@
-import type { NoteColor, Todo, TodoFilter, TodoSort } from "./types"
+import type { AuthUser, NoteColor, Todo, TodoFilter, TodoSort } from "./types"
+
+const TOKEN_KEY = "token"
+
+let sessionEpoch = 0
+
+export function endSession(): void {
+  sessionEpoch += 1
+  localStorage.removeItem(TOKEN_KEY)
+}
 
 export class ApiError extends Error {
-  constructor(message: string) {
+  status: number
+
+  constructor(message: string, status = 0) {
     super(message)
     this.name = "ApiError"
+    this.status = status
+  }
+}
+
+export function authToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function saveToken(value: string): void {
+  localStorage.setItem(TOKEN_KEY, value)
+}
+
+export function clearToken(): void {
+  endSession()
+}
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const token = authToken()
+  return {
+    ...(extra ?? {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 }
 
@@ -12,10 +44,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, {
       ...init,
-      headers: {
+      headers: authHeaders({
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
-      },
+      }),
     })
   } catch {
     throw new ApiError("Could not reach the API. Start the backend on port 8000.")
@@ -43,10 +75,52 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       typeof body.detail === "string"
         ? body.detail
         : `Request failed (${response.status})`
-    throw new ApiError(detail)
+    if (response.status === 401) clearToken()
+    throw new ApiError(detail, response.status)
   }
 
   return body as T
+}
+
+type AuthResponse = {
+  access_token: string
+  user: AuthUser
+}
+
+export async function signup(name: string, email: string, passcode: string): Promise<AuthUser | null> {
+  const epoch = sessionEpoch
+  const body = await request<AuthResponse>("/api/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ name, email, passcode }),
+  })
+  if (epoch !== sessionEpoch) return null
+  saveToken(body.access_token)
+  return body.user
+}
+
+export async function login(email: string, passcode: string): Promise<AuthUser | null> {
+  const epoch = sessionEpoch
+  const body = await request<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, passcode }),
+  })
+  if (epoch !== sessionEpoch) return null
+  saveToken(body.access_token)
+  return body.user
+}
+
+export function currentUser(): Promise<AuthUser> {
+  return request<AuthUser>("/api/auth/me")
+}
+
+export function resetPasscode(currentPasscode: string, newPasscode: string): Promise<void> {
+  return request<void>("/api/auth/passcode", {
+    method: "POST",
+    body: JSON.stringify({
+      current_passcode: currentPasscode,
+      new_passcode: newPasscode,
+    }),
+  })
 }
 
 export async function listTodos(
@@ -66,7 +140,7 @@ export async function listTodos(
 
   let response: Response
   try {
-    response = await fetch(`/api/todos?${params.toString()}`)
+    response = await fetch(`/api/todos?${params.toString()}`, { headers: authHeaders() })
   } catch {
     throw new ApiError("Could not reach the API. Start the backend on port 8000.")
   }
@@ -81,7 +155,8 @@ export async function listTodos(
       typeof body.detail === "string"
         ? body.detail
         : `Request failed (${response.status})`
-    throw new ApiError(detail)
+    if (response.status === 401) clearToken()
+    throw new ApiError(detail, response.status)
   }
 
   const items = body as Todo[]
