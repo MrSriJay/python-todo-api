@@ -5,7 +5,7 @@ A small TODO app with accounts. Each person signs up with a name, email, and 6-d
 ## Live demo
 
 <p align="center">
-  <a href="https://python-todo-api-ui.onrender.com">
+  <a href="https://python-todo-api-ui.onrender.com" target="_blank" rel="noopener noreferrer">
     <img alt="Open the live demo" src="https://img.shields.io/badge/Open%20the%20app-7c3aed?style=for-the-badge" width="340">
   </a>
 </p>
