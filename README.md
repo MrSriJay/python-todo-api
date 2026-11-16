@@ -26,12 +26,13 @@ Routing, request validation, and database access live in separate modules:
 - [User guide](docs/user-guide.md) ([PDF](docs/user-guide.pdf))
 - [Architecture and database](docs/architecture.md) ([PDF](docs/architecture.pdf))
 - [User guide and architecture, one PDF](docs/TODO-API-documentation.pdf)
+- [Swagger UI](https://python-todo-api.onrender.com/docs) for the hosted API
 
-## Demo
+## Live demo
 
-<video src="docs/demo.mp4" controls width="760"></video>
+[![Open the live demo](https://img.shields.io/badge/Open%20the%20app-7c3aed?style=for-the-badge)](https://python-todo-api-ui.onrender.com)
 
-[Play the walkthrough](docs/demo.mp4). It signs up, logs in, adds and edits a note, marks it done, searches and filters, switches between light and dark, deletes a note, and changes the passcode.
+The hosted app is at [python-todo-api-ui.onrender.com](https://python-todo-api-ui.onrender.com). Sign up, then add, edit, search, and complete notes.
 
 ## Interface
 
@@ -105,6 +106,8 @@ Those database credentials are for local development. The API container runs mig
 Python 3.11 or newer. Setup, migrations, tests, and database notes are in [server/README.md](server/README.md). The React UI is in [client/README.md](client/README.md).
 
 ## API
+
+The hosted API is [https://python-todo-api.onrender.com](https://python-todo-api.onrender.com). Swagger UI is at [https://python-todo-api.onrender.com/docs](https://python-todo-api.onrender.com/docs).
 
 | Method | Path | Success |
 | --- | --- | --- |
