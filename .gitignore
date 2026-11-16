@@ -13,3 +13,10 @@ dist/
 build/
 *.egg-info/
 node_modules/
+
+# Published docs only. The markdown, screenshots, and PDF builder stay local.
+docs/*
+!docs/architecture.pdf
+!docs/demo.mp4
+!docs/TODO-API-documentation.pdf
+!docs/user-guide.pdf

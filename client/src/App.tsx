@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 import {
   CheckCircle2,
   Circle,
@@ -6,20 +6,44 @@ import {
   Inbox,
   ListTodo,
   Loader2,
+  KeyRound,
+  LogOut,
+  Moon,
   Plus,
   Rows3,
+  Search,
+  StickyNote,
+  Sun,
+  UserRound,
+  X,
 } from "lucide-react"
+import { AuthScreen } from "./AuthScreen"
 import {
   ApiError,
+  authToken,
+  clearToken,
   createTodo,
+  currentUser,
   deleteTodo,
   listTodos,
   toggleTodo,
   updateTodo,
 } from "./api"
+import { ColorSwatches } from "./ColorSwatches"
 import { NotePad } from "./NotePad"
+import { PaperSheet } from "./PaperSheet"
+import { ResetPasscode } from "./ResetPasscode"
 import { TaskRow } from "./TaskRow"
-import type { Todo, TodoFilter, TodoSort } from "./types"
+import type { AuthUser, NoteColor, Todo, TodoFilter, TodoSort } from "./types"
+
+type View = "new" | "wall"
+type Theme = "light" | "dark"
+
+function initialTheme(): Theme {
+  const saved = localStorage.getItem("theme")
+  if (saved === "light" || saved === "dark") return saved
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+}
 
 const filters: { id: TodoFilter; label: string; icon: typeof Rows3 }[] = [
   { id: "all", label: "All", icon: Rows3 },
@@ -36,15 +60,96 @@ export function App() {
   const [total, setTotal] = useState(0)
   const [filter, setFilter] = useState<TodoFilter>("all")
   const [sort, setSort] = useState<TodoSort>("newest")
+  const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
+  const [color, setColor] = useState<NoteColor>("sun")
+  const [openedId, setOpenedId] = useState<number | null>(null)
+  const [pendingToggle, setPendingToggle] = useState<Todo | null>(null)
   const [creating, setCreating] = useState(false)
   const [leavingIds, setLeavingIds] = useState<number[]>([])
+  const [view, setView] = useState<View>("wall")
+  const [panelMotion, setPanelMotion] = useState<"" | "in-left" | "in-right">("")
+  const [theme, setTheme] = useState<Theme>(initialTheme)
+  const [session, setSession] = useState<AuthUser | null>(null)
+  const [sessionReady, setSessionReady] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false })
+
+  function showView(next: View) {
+    if (next === view) return
+    setPanelMotion(next === "new" ? "in-right" : "in-left")
+    setView(next)
+  }
+
+  useLayoutEffect(() => {
+    const root = tabsRef.current
+    if (!root) return
+    const measure = () => {
+      const selected = root.querySelector<HTMLElement>('[aria-selected="true"]')
+      if (!selected) return
+      setIndicator({ left: selected.offsetLeft, width: selected.offsetWidth, ready: true })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [view, session])
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem("theme", theme)
+  }, [theme])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onPointer(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false)
+    }
+    document.addEventListener("mousedown", onPointer)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onPointer)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [menuOpen])
+
+  useEffect(() => {
+    let cancelled = false
+    const saved = authToken()
+    if (!saved) {
+      setSessionReady(true)
+      return
+    }
+    currentUser()
+      .then((user) => {
+        if (!cancelled) setSession(user)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          clearToken()
+          setSession(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSessionReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!session) return
     let cancelled = false
     setRefreshing(true)
     listTodos(filter, sort)
@@ -55,7 +160,13 @@ export function App() {
         setError(null)
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) setError(errorMessage(loadError, "Could not load tasks."))
+        if (cancelled) return
+        if (loadError instanceof ApiError && loadError.status === 401) {
+          clearToken()
+          setSession(null)
+          return
+        }
+        setError(errorMessage(loadError, "Could not load tasks."))
       })
       .finally(() => {
         if (!cancelled) {
@@ -66,7 +177,7 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [filter, sort])
+  }, [filter, sort, session])
 
   async function reload() {
     const result = await listTodos(filter, sort)
@@ -88,6 +199,7 @@ export function App() {
       id: tempId,
       title: nextTitle,
       description: nextDescription || null,
+      color,
       done: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -96,6 +208,9 @@ export function App() {
     setCreating(true)
     setTitle("")
     setDescription("")
+    setColor("sun")
+    showView("wall")
+    if (filter === "done") setFilter("all")
     if (filter !== "done") {
       setTodos((current) =>
         sort === "oldest" ? [...current, optimistic] : [optimistic, ...current],
@@ -104,18 +219,31 @@ export function App() {
     }
 
     try {
-      const created = await createTodo(nextTitle, nextDescription || null)
+      const created = await createTodo(nextTitle, nextDescription || null, color)
       setTodos((current) => current.map((item) => (item.id === tempId ? created : item)))
     } catch (createError: unknown) {
       setTodos((current) => current.filter((item) => item.id !== tempId))
       setTotal((current) => Math.max(0, current - (filter === "done" ? 0 : 1)))
       setTitle(nextTitle)
       setDescription(nextDescription)
+      setColor(color)
+      showView("new")
       setError(errorMessage(createError, "Could not add the task."))
     } finally {
       setCreating(false)
     }
   }
+
+  useEffect(() => {
+    if (!pendingToggle) return
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      event.stopImmediatePropagation()
+      setPendingToggle(null)
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
+  }, [pendingToggle])
 
   async function onToggle(todo: Todo) {
     const nextDone = !todo.done
@@ -151,7 +279,7 @@ export function App() {
       }),
     )
     try {
-      const updated = await updateTodo(id, nextTitle, nextDescription)
+      const updated = await updateTodo(id, { title: nextTitle, description: nextDescription })
       setTodos((current) => current.map((item) => (item.id === id ? updated : item)))
       setError(null)
     } catch (saveError: unknown) {
@@ -163,7 +291,30 @@ export function App() {
     }
   }
 
+  async function onColor(todo: Todo, nextColor: NoteColor) {
+    let snapshot: Todo | undefined
+    setTodos((current) =>
+      current.map((item) => {
+        if (item.id !== todo.id) return item
+        snapshot = item
+        return { ...item, color: nextColor }
+      }),
+    )
+    try {
+      const updated = await updateTodo(todo.id, { color: nextColor })
+      setTodos((current) => current.map((item) => (item.id === todo.id ? updated : item)))
+      setError(null)
+    } catch (colorError: unknown) {
+      if (snapshot) {
+        const saved = snapshot
+        setTodos((current) => current.map((item) => (item.id === todo.id ? saved : item)))
+      }
+      setError(errorMessage(colorError, "Could not change the color."))
+    }
+  }
+
   async function onDelete(todo: Todo) {
+    if (openedId === todo.id) setOpenedId(null)
     setLeavingIds((current) => [...current, todo.id])
     await new Promise((resolve) => window.setTimeout(resolve, 280))
     setTodos((current) => current.filter((item) => item.id !== todo.id))
@@ -183,10 +334,76 @@ export function App() {
     }
   }
 
-  const countLabel = total === 1 ? "1 task" : `${total} tasks`
+  const needle = query.trim().toLowerCase()
+  const visibleTodos = needle
+    ? todos.filter((todo) => {
+        const description = (todo.description ?? "").replace(/<[^>]*>/g, " ")
+        return `${todo.title} ${description}`.toLowerCase().includes(needle)
+      })
+    : todos
+  const countLabel = needle
+    ? `${visibleTodos.length} of ${total}`
+    : total === 1
+      ? "1 task"
+      : `${total} tasks`
+  const opened = todos.find((item) => item.id === openedId) ?? null
+
+  function signOut() {
+    clearToken()
+    setMenuOpen(false)
+    setResetOpen(false)
+    setSession(null)
+    setTodos([])
+    setTotal(0)
+    setOpenedId(null)
+    setQuery("")
+    setPendingToggle(null)
+  }
+
+  const themeButton = (
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+    >
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      {theme === "dark" ? "Light" : "Dark"}
+    </button>
+  )
+
+  if (!sessionReady) {
+    return (
+      <main className="page">
+        <p className="status">
+          <Loader2 size={18} className="spin" />
+          Loading…
+        </p>
+      </main>
+    )
+  }
+
+  if (!session) {
+    return (
+      <main className="page is-auth">
+        <header className="masthead">
+          <span className="mark" aria-hidden="true">
+            <ListTodo size={22} />
+          </span>
+          <div>
+            <p className="eyebrow">TODO</p>
+            <h1>Tasks</h1>
+            <p className="lede">Log in to open your sticky wall.</p>
+          </div>
+          {themeButton}
+        </header>
+        <AuthScreen onSignedIn={setSession} />
+      </main>
+    )
+  }
 
   return (
-    <main className="page">
+    <main className={`page${view === "wall" ? " is-wide" : ""}`}>
       <header className="masthead">
         <span className="mark" aria-hidden="true">
           <ListTodo size={22} />
@@ -194,10 +411,82 @@ export function App() {
         <div>
           <p className="eyebrow">TODO</p>
           <h1>Tasks</h1>
-          <p className="lede">A single shared list. Add a task, edit it, check it off, or remove it.</p>
+          <p className="lede">Add a task, then see it on the sticky wall.</p>
+        </div>
+        <div className="account">
+          <div className="user-menu" ref={menuRef}>
+            <button
+              type="button"
+              className="user-button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span className="user-icon" aria-hidden="true">
+                <UserRound size={16} />
+              </span>
+              <span className="who">{session.name}</span>
+            </button>
+            {menuOpen ? (
+              <div className="user-drop" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setResetOpen(true)
+                  }}
+                >
+                  <KeyRound size={16} />
+                  Change passcode
+                </button>
+                <button type="button" role="menuitem" className="is-danger" onClick={signOut}>
+                  <LogOut size={16} />
+                  Log out
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {themeButton}
         </div>
       </header>
 
+      <div className="views" role="tablist" aria-label="Task views" ref={tabsRef}>
+        <span
+          className={`view-indicator${indicator.ready ? " is-ready" : ""}`}
+          style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
+        />
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "wall"}
+          className={view === "wall" ? "is-selected" : ""}
+          onClick={() => showView("wall")}
+        >
+          <StickyNote size={16} />
+          Sticky wall
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "new"}
+          className={view === "new" ? "is-selected" : ""}
+          onClick={() => showView("new")}
+        >
+          <Plus size={16} />
+          New task
+        </button>
+      </div>
+
+      {error ? (
+        <p className="banner" role="alert">
+          <CircleAlert size={18} />
+          {error}
+        </p>
+      ) : null}
+
+      <div key={view} className={`view-panel${panelMotion ? ` ${panelMotion}` : ""}`}>
+      {view === "new" ? (
       <form className="composer" onSubmit={(event) => void onCreate(event)}>
         <label>
           Title
@@ -217,19 +506,18 @@ export function App() {
             placeholder="Optional note. Bold a word, or start a list."
           />
         </div>
+        <div className="field">
+          <span>Color</span>
+          <ColorSwatches value={color} onChange={setColor} />
+        </div>
         <button type="submit" className="primary" disabled={creating}>
           {creating ? <Loader2 size={18} className="spin" /> : <Plus size={18} />}
           {creating ? "Adding" : "Add task"}
         </button>
       </form>
-
-      {error ? (
-        <p className="banner" role="alert">
-          <CircleAlert size={18} />
-          {error}
-        </p>
-      ) : null}
-
+      ) : (
+      <section className="board" aria-label="Sticky wall">
+        <h2>Sticky wall</h2>
       <div className="toolbar">
         <div className="filters" role="group" aria-label="Filter tasks">
           {filters.map((item) => {
@@ -248,6 +536,20 @@ export function App() {
             )
           })}
         </div>
+        <label className="search">
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search notes"
+            aria-label="Search notes"
+          />
+          {query ? (
+            <button type="button" className="search-clear" onClick={() => setQuery("")} aria-label="Clear search">
+              <X size={14} />
+            </button>
+          ) : null}
+        </label>
         <label className="sort">
           Sort
           <select value={sort} onChange={(event) => setSort(event.target.value as TodoSort)}>
@@ -264,27 +566,82 @@ export function App() {
           <Loader2 size={18} className="spin" />
           Loading tasks…
         </p>
-      ) : todos.length === 0 ? (
-        <div className="empty">
-          <Inbox size={28} />
-          <p>No tasks in this view.</p>
-        </div>
       ) : (
-        <ul className={`tasks${refreshing ? " is-refreshing" : ""}`}>
-          {todos.map((todo, index) => (
+        <ul key={filter} className={`wall${refreshing ? " is-refreshing" : ""}`}>
+          {visibleTodos.length === 0 ? (
+            <li className="empty">
+              <Inbox size={28} />
+              <p>{needle ? "No notes match that search." : "No tasks in this view."}</p>
+            </li>
+          ) : null}
+          {visibleTodos.map((todo, index) => (
             <TaskRow
               key={todo.id}
               todo={todo}
               index={index}
               leaving={leavingIds.includes(todo.id)}
-              onToggle={(item) => void onToggle(item)}
+              onOpen={(item) => setOpenedId(item.id)}
+              onToggle={setPendingToggle}
               onDelete={(item) => void onDelete(item)}
               onSave={onSave}
               onError={setError}
             />
           ))}
+          <li className="add-slot">
+            <button type="button" className="sticky-add" onClick={() => showView("new")}>
+              <Plus size={32} />
+              <span>Add a task</span>
+            </button>
+          </li>
         </ul>
       )}
+      </section>
+      )}
+      </div>
+      {opened ? (
+        <PaperSheet
+          todo={opened}
+          onClose={() => setOpenedId(null)}
+          onToggle={setPendingToggle}
+          onDelete={(item) => void onDelete(item)}
+          onSave={onSave}
+          onColor={(item, nextColor) => void onColor(item, nextColor)}
+          onError={setError}
+        />
+      ) : null}
+      {resetOpen ? <ResetPasscode onClose={() => setResetOpen(false)} /> : null}
+      {pendingToggle ? (
+        <div className="confirm-backdrop" onClick={() => setPendingToggle(null)}>
+          <div
+            className="confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="confirm-title">
+              {pendingToggle.done ? "Mark this note as not done?" : "Mark this note as done?"}
+            </h2>
+            <p>{pendingToggle.title}</p>
+            <div className="confirm-actions">
+              <button type="button" className="ghost" onClick={() => setPendingToggle(null)} autoFocus>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  const todo = pendingToggle
+                  setPendingToggle(null)
+                  void onToggle(todo)
+                }}
+              >
+                {pendingToggle.done ? "Mark open" : "Mark done"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }

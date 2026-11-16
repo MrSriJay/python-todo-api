@@ -5,8 +5,9 @@ from typing import Any
 import pytest
 from app.database import create_db_engine, get_db
 from app.main import app
-from app.models import Base, Todo
+from app.models import Base, Todo, User, utcnow
 from app.schemas import TITLE_MAX_LENGTH, TodoCreate
+from app.security import decrypt_text, hash_passcode
 from app.services.todos import TodoService
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
@@ -37,6 +38,7 @@ def test_create_list_get_and_default_done(client: TestClient) -> None:
     assert created["title"] == "Buy milk"
     assert created["description"] == "2% or oat"
     assert created["done"] is False
+    assert created["color"] == "sun"
     assert created["created_at"].endswith("Z")
     assert created["updated_at"].endswith("Z")
 
@@ -50,6 +52,24 @@ def test_create_list_get_and_default_done(client: TestClient) -> None:
     fetched = client.get(f"/api/todos/{created['id']}")
     assert fetched.status_code == 200
     assert fetched.json() == created
+
+
+def test_note_color_can_be_chosen_and_changed(client: TestClient) -> None:
+    created = client.post("/api/todos", json={"title": "Pink note", "color": "blush"})
+    assert created.status_code == 201
+    assert created.json()["color"] == "blush"
+
+    changed = client.put(f"/api/todos/{created.json()['id']}", json={"color": "sky"})
+    assert changed.status_code == 200
+    assert changed.json()["color"] == "sky"
+    assert changed.json()["title"] == "Pink note"
+
+    greened = client.put(f"/api/todos/{created.json()['id']}", json={"color": "leaf"})
+    assert greened.status_code == 200
+    assert greened.json()["color"] == "leaf"
+
+    rejected = client.post("/api/todos", json={"title": "Nope", "color": "neon"})
+    assert rejected.status_code == 422
 
 
 def test_blank_description_is_stored_as_null(client: TestClient) -> None:
@@ -246,7 +266,12 @@ def test_unhandled_errors_hide_internals(
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app, raise_server_exceptions=False) as raw_client:
-            response = raw_client.get("/api/todos")
+            signup = raw_client.post(
+                "/api/auth/signup",
+                json={"name": "Ada Lovelace", "email": "ada@example.com", "passcode": "123456"},
+            )
+            token = signup.json()["access_token"]
+            response = raw_client.get("/api/todos", headers={"Authorization": f"Bearer {token}"})
     finally:
         app.dependency_overrides.clear()
 
@@ -262,7 +287,15 @@ def test_rows_survive_a_new_database_session(tmp_path: Path) -> None:
     Base.metadata.create_all(engine)
     first = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)()
     try:
-        TodoService(first).create_todo(TodoCreate(title="persist me", description=None))
+        user = User(
+            name="Ada",
+            email="ada@example.com",
+            passcode_hash=hash_passcode("123456"),
+            created_at=utcnow(),
+        )
+        first.add(user)
+        first.commit()
+        TodoService(first).create_todo(user, TodoCreate(title="persist me", description=None))
     finally:
         first.close()
     engine.dispose()
@@ -271,6 +304,7 @@ def test_rows_survive_a_new_database_session(tmp_path: Path) -> None:
     second = sessionmaker(bind=reopened, autoflush=False, expire_on_commit=False)()
     try:
         items, total = TodoService(second).list_todos(
+            user,
             done=None,
             limit=None,
             offset=0,
@@ -278,7 +312,8 @@ def test_rows_survive_a_new_database_session(tmp_path: Path) -> None:
             order="desc",
         )
         assert total == 1
-        assert items[0].title == "persist me"
+        assert items[0].title != "persist me"
+        assert decrypt_text(items[0].title) == "persist me"
     finally:
         second.close()
         reopened.dispose()

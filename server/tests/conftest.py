@@ -30,6 +30,13 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app) as test_client:
+            signup = test_client.post(
+                "/api/auth/signup",
+                json={"name": "Ada Lovelace", "email": "ada@example.com", "passcode": "123456"},
+            )
+            assert signup.status_code == 201
+            token = signup.json()["access_token"]
+            test_client.headers["Authorization"] = f"Bearer {token}"
             yield test_client
     finally:
         app.dependency_overrides.clear()

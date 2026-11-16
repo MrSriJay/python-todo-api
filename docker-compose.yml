@@ -24,6 +24,8 @@ services:
       DATABASE_URL: postgresql+psycopg://todo:todo@database:5432/todo
       LOG_LEVEL: INFO
       CORS_ORIGINS: "*"
+      JWT_SECRET: dev-todo-jwt-secret-change-me-now
+      NOTE_ENCRYPTION_KEY: 5TNNnzTUoxctj6W88TAld9X-ESJ45b4qDQohSHyFg0c=
     depends_on:
       database:
         condition: service_healthy

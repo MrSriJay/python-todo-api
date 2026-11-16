@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./todo.db"
     log_level: str = "INFO"
     cors_origins: str = "*"
+    jwt_secret: str = "dev-todo-jwt-secret-change-me-now"
+    jwt_expire_minutes: int = 60 * 24 * 7
+    note_encryption_key: str = "5TNNnzTUoxctj6W88TAld9X-ESJ45b4qDQohSHyFg0c="
 
     @field_validator("database_url")
     @classmethod

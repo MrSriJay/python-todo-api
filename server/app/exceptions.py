@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.services.auth import EmailAlreadyUsedError, InvalidLoginError, InvalidPasscodeError
 from app.services.todos import TodoNotFoundError
 
 
@@ -42,6 +43,33 @@ def _format_error(error: dict[str, Any]) -> str:
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(EmailAlreadyUsedError)
+    async def email_used_handler(request: Request, exc: EmailAlreadyUsedError) -> JSONResponse:
+        del request, exc
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "An account with this email already exists"},
+        )
+
+    @app.exception_handler(InvalidLoginError)
+    async def invalid_login_handler(request: Request, exc: InvalidLoginError) -> JSONResponse:
+        del request, exc
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Email or passcode is incorrect"},
+        )
+
+    @app.exception_handler(InvalidPasscodeError)
+    async def invalid_passcode_handler(
+        request: Request,
+        exc: InvalidPasscodeError,
+    ) -> JSONResponse:
+        del request, exc
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Current passcode is incorrect"},
+        )
+
     @app.exception_handler(TodoNotFoundError)
     async def todo_not_found_handler(
         request: Request,
