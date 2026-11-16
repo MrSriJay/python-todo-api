@@ -10,6 +10,12 @@ client/     React UI
 docs/       User guide and architecture
 ```
 
+## Live demo
+
+[![Open the live demo](https://img.shields.io/badge/Open%20the%20app-7c3aed?style=for-the-badge)](https://python-todo-api-ui.onrender.com)
+
+The hosted app is at [python-todo-api-ui.onrender.com](https://python-todo-api-ui.onrender.com). Sign up, then add, edit, search, and complete notes.
+
 Routing, request validation, and database access live in separate modules:
 
 - `server/app/routers/auth.py` — signup, login, and passcode change
@@ -27,12 +33,6 @@ Routing, request validation, and database access live in separate modules:
 - [Architecture and database](docs/architecture.md) ([PDF](docs/architecture.pdf))
 - [User guide and architecture, one PDF](docs/TODO-API-documentation.pdf)
 - [Swagger UI](https://python-todo-api.onrender.com/docs) for the hosted API
-
-## Live demo
-
-[![Open the live demo](https://img.shields.io/badge/Open%20the%20app-7c3aed?style=for-the-badge)](https://python-todo-api-ui.onrender.com)
-
-The hosted app is at [python-todo-api-ui.onrender.com](https://python-todo-api-ui.onrender.com). Sign up, then add, edit, search, and complete notes.
 
 ## Interface
 
