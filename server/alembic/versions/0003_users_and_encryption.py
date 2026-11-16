@@ -37,7 +37,13 @@ def upgrade() -> None:
             existing_nullable=False,
         )
         batch.add_column(sa.Column("user_id", sa.Integer(), nullable=False))
-        batch.create_foreign_key("fk_todos_user_id", "users", ["user_id"], ["id"], ondelete="CASCADE")
+        batch.create_foreign_key(
+            "fk_todos_user_id",
+            "users",
+            ["user_id"],
+            ["id"],
+            ondelete="CASCADE",
+        )
         batch.create_index("ix_todos_user_id", ["user_id"])
 
 

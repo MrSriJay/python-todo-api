@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    allowedHosts: ["python-todo-api-ui.onrender.com", ".onrender.com"],
     proxy: {
       "/api": apiTarget,
       "/health": apiTarget,
