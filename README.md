@@ -2,6 +2,16 @@
 
 A small TODO app with accounts. Each person signs up with a name, email, and 6-digit passcode, then keeps notes on a sticky wall. The API checks a JWT on every task request. Titles and descriptions are encrypted in PostgreSQL. The API is documented with OpenAPI at `/docs`.
 
+## Live demo
+
+<p align="center">
+  <a href="https://python-todo-api-ui.onrender.com">
+    <img alt="Open the live demo" src="https://img.shields.io/badge/Open%20the%20app-7c3aed?style=for-the-badge" width="340">
+  </a>
+</p>
+
+The hosted app is at [python-todo-api-ui.onrender.com](https://python-todo-api-ui.onrender.com). Sign up, then add, edit, search, and complete notes.
+
 ## Layout
 
 ```text
@@ -9,12 +19,6 @@ server/     FastAPI application, migrations, and tests
 client/     React UI
 docs/       User guide and architecture
 ```
-
-## Live demo
-
-[![Open the live demo](https://img.shields.io/badge/Open%20the%20app-7c3aed?style=for-the-badge)](https://python-todo-api-ui.onrender.com)
-
-The hosted app is at [python-todo-api-ui.onrender.com](https://python-todo-api-ui.onrender.com). Sign up, then add, edit, search, and complete notes.
 
 Routing, request validation, and database access live in separate modules:
 
