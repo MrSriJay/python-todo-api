@@ -1,5 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react"
 import {
+  CheckCircle2,
+  Circle,
+  CircleAlert,
+  Inbox,
+  ListTodo,
+  Loader2,
+  Plus,
+  Rows3,
+} from "lucide-react"
+import {
   ApiError,
   createTodo,
   deleteTodo,
@@ -7,13 +17,14 @@ import {
   toggleTodo,
   updateTodo,
 } from "./api"
+import { NotePad } from "./NotePad"
 import { TaskRow } from "./TaskRow"
 import type { Todo, TodoFilter, TodoSort } from "./types"
 
-const filters: { id: TodoFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "done", label: "Done" },
+const filters: { id: TodoFilter; label: string; icon: typeof Rows3 }[] = [
+  { id: "all", label: "All", icon: Rows3 },
+  { id: "open", label: "Open", icon: Circle },
+  { id: "done", label: "Done", icon: CheckCircle2 },
 ]
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -154,7 +165,7 @@ export function App() {
 
   async function onDelete(todo: Todo) {
     setLeavingIds((current) => [...current, todo.id])
-    await new Promise((resolve) => window.setTimeout(resolve, 180))
+    await new Promise((resolve) => window.setTimeout(resolve, 280))
     setTodos((current) => current.filter((item) => item.id !== todo.id))
     setTotal((current) => Math.max(0, current - 1))
     setLeavingIds((current) => current.filter((id) => id !== todo.id))
@@ -177,9 +188,14 @@ export function App() {
   return (
     <main className="page">
       <header className="masthead">
-        <p className="eyebrow">TODO</p>
-        <h1>Tasks</h1>
-        <p className="lede">A single shared list. Add a task, edit it, check it off, or remove it.</p>
+        <span className="mark" aria-hidden="true">
+          <ListTodo size={22} />
+        </span>
+        <div>
+          <p className="eyebrow">TODO</p>
+          <h1>Tasks</h1>
+          <p className="lede">A single shared list. Add a task, edit it, check it off, or remove it.</p>
+        </div>
       </header>
 
       <form className="composer" onSubmit={(event) => void onCreate(event)}>
@@ -192,40 +208,45 @@ export function App() {
             placeholder="What needs doing?"
           />
         </label>
-        <label>
-          Description
-          <textarea
+        <div className="field">
+          <span>Description</span>
+          <NotePad
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={2000}
-            rows={2}
-            placeholder="Optional note"
+            onChange={setDescription}
+            label="Description"
+            placeholder="Optional note. Bold a word, or start a list."
           />
-        </label>
-        <button type="submit" disabled={creating}>
-          {creating ? "Adding…" : "Add task"}
+        </div>
+        <button type="submit" className="primary" disabled={creating}>
+          {creating ? <Loader2 size={18} className="spin" /> : <Plus size={18} />}
+          {creating ? "Adding" : "Add task"}
         </button>
       </form>
 
       {error ? (
         <p className="banner" role="alert">
+          <CircleAlert size={18} />
           {error}
         </p>
       ) : null}
 
       <div className="toolbar">
         <div className="filters" role="group" aria-label="Filter tasks">
-          {filters.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={item.id === filter ? "is-selected" : ""}
-              aria-pressed={item.id === filter}
-              onClick={() => setFilter(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {filters.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={item.id === filter ? "is-selected" : ""}
+                aria-pressed={item.id === filter}
+                onClick={() => setFilter(item.id)}
+              >
+                <Icon size={15} />
+                {item.label}
+              </button>
+            )
+          })}
         </div>
         <label className="sort">
           Sort
@@ -239,15 +260,22 @@ export function App() {
       </div>
 
       {loading ? (
-        <p className="status">Loading tasks…</p>
+        <p className="status">
+          <Loader2 size={18} className="spin" />
+          Loading tasks…
+        </p>
       ) : todos.length === 0 ? (
-        <p className="status">No tasks in this view.</p>
+        <div className="empty">
+          <Inbox size={28} />
+          <p>No tasks in this view.</p>
+        </div>
       ) : (
         <ul className={`tasks${refreshing ? " is-refreshing" : ""}`}>
-          {todos.map((todo) => (
+          {todos.map((todo, index) => (
             <TaskRow
               key={todo.id}
               todo={todo}
+              index={index}
               leaving={leavingIds.includes(todo.id)}
               onToggle={(item) => void onToggle(item)}
               onDelete={(item) => void onDelete(item)}

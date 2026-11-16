@@ -1,6 +1,6 @@
 # TODO client
 
-React UI for the TODO API. It lists every matching task, adds tasks, edits the title and description, toggles done, and deletes. Completed tasks are faded and struck through. Creates, toggles, edits, and deletes update the list immediately, then roll back if the API rejects the change.
+React UI for the TODO API. It lists every matching task, adds tasks, edits the title and description, toggles done, and deletes. The description is a notepad with bold, italic, underline, strikethrough, and lists. Completed tasks are faded and struck through. Creates, toggles, edits, and deletes update the list immediately, then roll back if the API rejects the change.
 
 The dev server proxies `/api` to the backend, so the browser does not call port 8000 directly.
 

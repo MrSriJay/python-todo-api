@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react"
+import { Check, Loader2, Pencil, Trash2, X } from "lucide-react"
 import { ApiError } from "./api"
+import { NotePad, NoteText } from "./NotePad"
 import type { Todo } from "./types"
 
 type TaskRowProps = {
   todo: Todo
+  index: number
   leaving: boolean
   onToggle: (todo: Todo) => void
   onDelete: (todo: Todo) => void
@@ -11,7 +14,15 @@ type TaskRowProps = {
   onError: (message: string) => void
 }
 
-export function TaskRow({ todo, leaving, onToggle, onDelete, onSave, onError }: TaskRowProps) {
+export function TaskRow({
+  todo,
+  index,
+  leaving,
+  onToggle,
+  onDelete,
+  onSave,
+  onError,
+}: TaskRowProps) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(todo.title)
   const [description, setDescription] = useState(todo.description ?? "")
@@ -42,15 +53,20 @@ export function TaskRow({ todo, leaving, onToggle, onDelete, onSave, onError }: 
   }
 
   return (
-    <li className={`task${todo.done ? " is-done" : ""}${leaving ? " is-leaving" : ""}`}>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={todo.done}
-          onChange={() => onToggle(todo)}
-          aria-label={todo.done ? `Mark "${todo.title}" as not done` : `Mark "${todo.title}" as done`}
-        />
-      </label>
+    <li
+      className={`task${todo.done ? " is-done" : ""}${leaving ? " is-leaving" : ""}`}
+      style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
+    >
+      <button
+        type="button"
+        className={`check${todo.done ? " is-on" : ""}`}
+        role="checkbox"
+        aria-checked={todo.done}
+        aria-label={todo.done ? `Mark "${todo.title}" as not done` : `Mark "${todo.title}" as done`}
+        onClick={() => onToggle(todo)}
+      >
+        <Check size={15} strokeWidth={3} />
+      </button>
 
       {editing ? (
         <div className="edit">
@@ -60,23 +76,19 @@ export function TaskRow({ todo, leaving, onToggle, onDelete, onSave, onError }: 
             maxLength={200}
             aria-label="Title"
           />
-          <textarea
+          <NotePad
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={2000}
-            rows={2}
-            aria-label="Description"
+            onChange={setDescription}
+            label="Description"
+            placeholder="Optional note. Bold a word, or start a list."
           />
           <div className="row-actions">
-            <button type="button" onClick={() => void save()} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
+            <button type="button" className="primary" onClick={() => void save()} disabled={saving}>
+              {saving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+              {saving ? "Saving" : "Save"}
             </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => setEditing(false)}
-              disabled={saving}
-            >
+            <button type="button" className="ghost" onClick={() => setEditing(false)} disabled={saving}>
+              <X size={16} />
               Cancel
             </button>
           </div>
@@ -84,17 +96,23 @@ export function TaskRow({ todo, leaving, onToggle, onDelete, onSave, onError }: 
       ) : (
         <div className="task-body">
           <p className="task-title">{todo.title}</p>
-          {todo.description ? <p className="task-description">{todo.description}</p> : null}
+          {todo.description ? (
+            <div className="task-description">
+              <NoteText value={todo.description} />
+            </div>
+          ) : null}
         </div>
       )}
 
       {editing ? null : (
         <div className="row-actions">
-          <button type="button" className="ghost" onClick={() => setEditing(true)}>
-            Edit
+          <button type="button" className="icon-button" onClick={() => setEditing(true)}>
+            <Pencil size={16} />
+            <span>Edit</span>
           </button>
-          <button type="button" className="danger" onClick={() => onDelete(todo)}>
-            Delete
+          <button type="button" className="icon-button danger" onClick={() => onDelete(todo)}>
+            <Trash2 size={16} />
+            <span>Delete</span>
           </button>
         </div>
       )}
