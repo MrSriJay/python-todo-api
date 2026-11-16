@@ -36,7 +36,13 @@ class TodoCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(description="Short name of the task.")
-    description: str | None = Field(default=None, description="Optional longer note.")
+    description: str | None = Field(
+        default=None,
+        description=(
+            "Optional note. The UI stores bold, italic, underline, strike, and lists "
+            "as a small set of HTML tags: strong, em, u, s, ul, ol, li, br, div."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_fields(self) -> "TodoCreate":

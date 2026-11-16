@@ -50,10 +50,10 @@ The initial revision creates the `todos` table. Apply migrations before starting
 Preferred: PostgreSQL 16.
 
 ```text
-DATABASE_URL=postgresql+psycopg://todo:todo@localhost:5432/todo
+DATABASE_URL=postgresql+psycopg://todo:todo@localhost:5433/todo
 ```
 
-`postgresql://` and `postgres://` URLs are rewritten to the `postgresql+psycopg` driver. From the repository root, `docker compose up --build` starts PostgreSQL and the API together. The published database port is `5432`, with user `todo`, password `todo`, and database `todo`. Those values are for local development.
+`postgresql://` and `postgres://` URLs are rewritten to the `postgresql+psycopg` driver. From the repository root, `docker compose up --build` starts PostgreSQL and the API together. The published database port is `5433`, with user `todo`, password `todo`, and database `todo`. Port `5433` is used on the host so it does not collide with a PostgreSQL install already listening on `5432`. Inside Docker the API still connects to `database:5432`. Those values are for local development.
 
 SQLite is supported for local development and for the automated tests:
 
