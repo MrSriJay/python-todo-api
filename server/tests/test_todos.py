@@ -37,6 +37,7 @@ def test_create_list_get_and_default_done(client: TestClient) -> None:
     assert created["title"] == "Buy milk"
     assert created["description"] == "2% or oat"
     assert created["done"] is False
+    assert created["color"] == "sun"
     assert created["created_at"].endswith("Z")
     assert created["updated_at"].endswith("Z")
 
@@ -50,6 +51,24 @@ def test_create_list_get_and_default_done(client: TestClient) -> None:
     fetched = client.get(f"/api/todos/{created['id']}")
     assert fetched.status_code == 200
     assert fetched.json() == created
+
+
+def test_note_color_can_be_chosen_and_changed(client: TestClient) -> None:
+    created = client.post("/api/todos", json={"title": "Pink note", "color": "blush"})
+    assert created.status_code == 201
+    assert created.json()["color"] == "blush"
+
+    changed = client.put(f"/api/todos/{created.json()['id']}", json={"color": "sky"})
+    assert changed.status_code == 200
+    assert changed.json()["color"] == "sky"
+    assert changed.json()["title"] == "Pink note"
+
+    greened = client.put(f"/api/todos/{created.json()['id']}", json={"color": "leaf"})
+    assert greened.status_code == 200
+    assert greened.json()["color"] == "leaf"
+
+    rejected = client.post("/api/todos", json={"title": "Nope", "color": "neon"})
+    assert rejected.status_code == 422
 
 
 def test_blank_description_is_stored_as_null(client: TestClient) -> None:

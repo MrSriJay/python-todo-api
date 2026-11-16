@@ -10,6 +10,7 @@ DESCRIPTION_MAX_LENGTH = 2000
 
 SortField = Literal["created_at", "updated_at", "title"]
 SortOrder = Literal["asc", "desc"]
+NoteColor = Literal["sun", "sky", "blush", "peach", "leaf"]
 
 
 def _clean_title(value: str | None) -> str:
@@ -43,6 +44,7 @@ class TodoCreate(BaseModel):
             "as a small set of HTML tags: strong, em, u, s, ul, ol, li, br, div."
         ),
     )
+    color: NoteColor = Field(default="sun", description="Sticky note color.")
 
     @model_validator(mode="after")
     def validate_fields(self) -> "TodoCreate":
@@ -58,6 +60,7 @@ class TodoUpdate(BaseModel):
 
     title: str | None = None
     description: str | None = None
+    color: NoteColor | None = None
 
     @model_validator(mode="after")
     def validate_fields(self) -> "TodoUpdate":
@@ -76,6 +79,7 @@ class TodoRead(BaseModel):
     id: int
     title: str
     description: str | None
+    color: NoteColor
     done: bool
     created_at: datetime
     updated_at: datetime

@@ -1,4 +1,4 @@
-import type { Todo, TodoFilter, TodoSort } from "./types"
+import type { NoteColor, Todo, TodoFilter, TodoSort } from "./types"
 
 export class ApiError extends Error {
   constructor(message: string) {
@@ -90,21 +90,28 @@ export async function listTodos(
   return { items, total: Number.isNaN(total) ? items.length : total }
 }
 
-export function createTodo(title: string, description: string | null): Promise<Todo> {
+export function createTodo(
+  title: string,
+  description: string | null,
+  color: NoteColor,
+): Promise<Todo> {
   return request<Todo>("/api/todos", {
     method: "POST",
-    body: JSON.stringify(description ? { title, description } : { title }),
+    body: JSON.stringify({
+      title,
+      ...(description ? { description } : {}),
+      color,
+    }),
   })
 }
 
 export function updateTodo(
   id: number,
-  title: string,
-  description: string | null,
+  patch: { title?: string; description?: string | null; color?: NoteColor },
 ): Promise<Todo> {
   return request<Todo>(`/api/todos/${id}`, {
     method: "PUT",
-    body: JSON.stringify({ title, description }),
+    body: JSON.stringify(patch),
   })
 }
 

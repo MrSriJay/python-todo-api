@@ -61,6 +61,7 @@ class TodoService:
         todo = Todo(
             title=data.title,
             description=data.description,
+            color=data.color,
             done=False,
             created_at=now,
             updated_at=now,
@@ -77,6 +78,8 @@ class TodoService:
             todo.title = data.title
         if "description" in data.model_fields_set:
             todo.description = data.description
+        if "color" in data.model_fields_set and data.color is not None:
+            todo.color = data.color
         todo.updated_at = utcnow()
         self.session.commit()
         self.session.refresh(todo)
